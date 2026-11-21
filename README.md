@@ -85,9 +85,9 @@
 自行焊接参考（整机成本约 ¥30，支持移动/联通/电信，取决于 ML307 核心板版本）：
 
 - **ESP32-C6 SuperMini**（4MB Flash、USB-C、板载 USB-Serial-JTAG）
-- **ML307R/C/A 核心板**（引出 UART、EN、SIM 卡槽和天线接口；建议选带 3.3V 串口电平的核心板）
-- **4G FPC 天线**（与核心板配套）
-- **Nano SIM 卡**（按需开通短信功能）
+- **ML307R/C/A 核心板**（引出 UART、EN、SIM 卡槽和天线接口；建议选带 3.3V 串口电平的核心板；如需电信网络需使用ML307A）
+- **4G 天线**（与核心板配套，一般为IPEX-1接口）
+- **Nano SIM 卡**
 
 也可以直接购买现成的 ML307 短信转发套件，把主控换成 ESP32-C6 SuperMini 即可。
 
@@ -96,22 +96,22 @@
 ESP32-C6 SuperMini 与 ML307R/C/A 通过 UART 连接：
 
 ```
-┌──────────────────────────────────────────────┐
-|                                              |
-|  ESP32-C6 SuperMini       ML307R/C/A核心板    |
-| ┌───────────────────┐    ┌─────────────────┐ |
-└─┼─ GPIO19 (MODEM_EN)│    │                 │ |
-  │        GPIO20 (TX) ─┼──►│ RX              │ |
-  │                   │    │             EN ─┼─┘
-  │        GPIO14 (RX) ◄┼────┤ TX              │
-  │                   │    │                 │
-  │              GND ─┼────┤ GND             │
-  │                   │    │                 │
-  │               5V ─┼────┤ VCC (5V)        │
-  │                   │    │                 │
-  └───────────────────┘    └─────────────────┘
-                           │  SIM卡槽 + 天线  │
-                           └─────────────────┘
+
+   ESP32-C6 SuperMini
+  ┌───────────────────┐      
+  │                   │
+  │      GPIO14 (RX) ◄┼─┐     ML307R/C/A核心板 
+  │                   │ |   ┌─────────────────┐
+  │                   │ |   │                 │
+  │  GPIO19 (MODEM_EN)│─┼──►│ EN              │
+  │        GPIO20 (TX)│─┼──►│ RX              │
+  │              3V3  │ └───│ TX              │
+  │              GND ─┼─────┤ GND             │
+  │               5V ─┼─────┤ VCC (5V)        │
+  │                   │     │                 │
+  └───────────────────┘     └─────────────────┘
+                            │  SIM卡槽 + 天线  │
+                            └─────────────────┘
 ```
 
 | 信号 | ESP32-C6 SuperMini | ML307R/C/A |
@@ -160,11 +160,11 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
 
 ### 方式一：图形化烧录（推荐，零安装）
 
-1. 从 [GitHub Releases](../../releases/latest) 下载最新版固件，解压获得 `full.bin`
+1. 从 [GitHub Releases](../../releases/latest) 下载最新版 `full-***.bin` 固件
 2. 使用 Chrome 或 Edge 浏览器（88+）打开 [ESPConnect](https://thelastoutpostworkshop.github.io/ESPConnect/)
 3. 波特率选择 `460800`
 4. 点击「连接」，在浏览器弹窗中选择 "USB JTAG/serial debug unit" 设备
-5. 进入「闪存工具」→「烧录固件」，上传 `full.bin` 即可完成全量烧录
+5. 进入「闪存工具」→「烧录固件」，上传 `full-***.bin` 即可完成全量烧录
 
 ### 方式二：命令行烧录（进阶）
 
