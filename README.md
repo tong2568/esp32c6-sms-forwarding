@@ -124,38 +124,6 @@ ESP32-C6 SuperMini 与 ML307R/C/A 通过 UART 连接：
 
 > 如需改引脚，编辑 [`src/main.cpp`](src/main.cpp) 顶部的 `TXD/RXD/MODEM_EN_PIN` 宏即可（GPIO20/14 均为 C6 普通 GPIO，无 strapping/JTAG/Flash 复用，可直接用于 UART）。
 
-## 编译与烧录
-
-```bash
-# 编译（default_envs 已指向 C6，直接 pio run 即可）
-pio run
-# 或显式指定环境
-pio run -e esp32c6_supermini
-
-# 烧录固件 + Web UI 文件系统
-pio run -e esp32c6_supermini -t upload
-pio run -e esp32c6_supermini -t uploadfs
-```
-
-命令行全量烧录（esptool）：
-
-```bash
-pip install "esptool>=4.8"
-esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
-```
-
-## Release 与在线升级
-
-- 推送到 `master` 后，GitHub Actions 会自动构建 C6 固件并发布 Release（`full-*.bin`、`update-*.bin`、`ota-*.bin`、`littlefs-*.bin`、`firmware-*.elf`）。
-- 固件内的在线升级地址由 CI 注入为当前仓库，例如 `https://github.com/<owner>/<repo>/releases`。
-- 本地构建想指向自己的 Release，可用环境变量覆盖：
-
-  ```bash
-  OTA_GITHUB_REPO=<owner>/<repo> pio run -e esp32c6_supermini
-  ```
-
-- 也可以在工具箱里「手动上传固件（`ota-*.bin`）」完成离线升级。
-
 ## 快速开始
 
 ### 方式一：图形化烧录（推荐，零安装）
@@ -195,6 +163,38 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x3B0000 littlefs.bin
 4. 设备重启后连接路由器，通过路由器分配的 IP 访问管理界面
 5. 默认 Web 界面账号/密码为 `admin / admin123`，请尽快修改
 6. 在推送通道区域添加并配置推送方式，保存配置
+
+## 编译与烧录
+
+```bash
+# 编译（default_envs 已指向 C6，直接 pio run 即可）
+pio run
+# 或显式指定环境
+pio run -e esp32c6_supermini
+
+# 烧录固件 + Web UI 文件系统
+pio run -e esp32c6_supermini -t upload
+pio run -e esp32c6_supermini -t uploadfs
+```
+
+命令行全量烧录（esptool）：
+
+```bash
+pip install "esptool>=4.8"
+esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
+```
+
+## Release 与在线升级
+
+- 推送到 `master` 后，GitHub Actions 会自动构建 C6 固件并发布 Release（`full-*.bin`、`update-*.bin`、`ota-*.bin`、`littlefs-*.bin`、`firmware-*.elf`）。
+- 固件内的在线升级地址由 CI 注入为当前仓库，例如 `https://github.com/<owner>/<repo>/releases`。
+- 本地构建想指向自己的 Release，可用环境变量覆盖：
+
+  ```bash
+  OTA_GITHUB_REPO=<owner>/<repo> pio run -e esp32c6_supermini
+  ```
+
+- 也可以在工具箱里「手动上传固件（`ota-*.bin`）」完成离线升级。
 
 ## 引脚定义
 
