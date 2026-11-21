@@ -1,24 +1,22 @@
-# 低成本短信转发器（ESP32-C6 SuperMini 移植版）
+# 低成本短信转发器（ESP32-C6 SuperMini + ML307R/C/A）
 
-> 本仓库是 [maxming2333/esp32-sms-forwarding](https://github.com/maxming2333/esp32-sms-forwarding) 的 **ESP32-C6 SuperMini 移植 fork**；上游又来自 [chenxuuu/sms_forwarding](https://github.com/chenxuuu/sms_forwarding)，在此基础上改用 C++17 + PlatformIO 重构。
+> 基于 [maxming2333/esp32-sms-forwarding](https://github.com/maxming2333/esp32-sms-forwarding)（其上游为 [chenxuuu/sms_forwarding](https://github.com/chenxuuu/sms_forwarding)）移植到 **ESP32-C6 SuperMini（4MB Flash）**。硬件方案与原版一致（ML307R/C/A），仅主控和接线不同。
 
-基于 **ESP32-C6 SuperMini（4MB Flash）** + ML307R/C/A 的低成本短信转发器，支持多种推送方式，适合需要远程接收短信通知的场景，如验证码接收、物联网设备监控等。
+基于 ESP32-C6 SuperMini 和 ML307R/C/A 的低成本短信转发器，支持多种推送方式，适合需要远程接收短信通知的场景，如验证码接收、物联网设备监控等。
 
-> 编译：`pio run -e esp32c6_supermini`；烧录：`esptool --chip esp32c6 ...`（详见下文「ESP32-C6 SuperMini 移植说明」）。本仓库的 Release 只发布 C6 固件。
+- 编译：`pio run -e esp32c6_supermini`
+- 烧录：`esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin`
+- 本仓库只发布 ESP32-C6 固件。
 
 ## 与上游的主要差异
 
-- **主控换成 ESP32-C6 SuperMini（4MB）**：接线改为 `EN=GPIO19`、`TX=GPIO20`、`RX=GPIO14`（见下方接线图）。
-- **在线升级指向本仓库**：CI 构建时自动注入当前仓库地址，设备只升级本仓库发布的 C6 固件；C3 构建关闭在线升级。
+- **主控换成 ESP32-C6 SuperMini（4MB）**：接线为 `EN=GPIO19`、`TX=GPIO20`、`RX=GPIO14`（见下方接线图）。
+- **在线升级指向本仓库**：CI 构建时自动注入当前仓库地址，设备只升级本仓库发布的 C6 固件。
 - **WiFi 强制 WPA2**：规避 ESP-IDF 5.5 在 WPA2/WPA3 混合模式下的回连问题（路由器其它设备仍可保留 WPA3）。
 - **默认关闭蜂窝数据**：初始化即 `AT+CGACT=0,1`，避免无流量套餐的卡产生数据扣费；通知走 WiFi。
 - **BluFi（BLE 配网）禁用**：arduino-esp32 3.x 已改用 NimBLE、无 Bluedroid；AP 网页配网（`SMS-Forwarder-AP` / `192.168.4.1`）保留。
 - **日志增加 64 行内存环形缓冲**：`/api/logs` 在未开启「写入日志文件」时也能查看最近日志。
 - 修复 ESP-IDF 5.x / mbedTLS 3.x 编译兼容性、`task_wdt` 刷屏问题。
-
-> 视频教程：[B站视频](https://www.bilibili.com/video/BV1cSmABYEiX)
-
-<img src="assets/photo.png" width="200" />
 
 ## 功能
 
@@ -82,60 +80,20 @@
 | `{sim_slot}` | 卡槽标识 |
 | `{signal}` | 信号强度 |
 
-|状态信息|主动 Ping|
-|-|-|
-|![](assets/status.png)|![](assets/ping.png)|
-
 ## 硬件搭配
 
-如果希望自行焊接硬件，参考下面的硬件搭配，总成本约¥27.8，仅支持移动/联通卡。
+自行焊接参考（整机成本约 ¥30，支持移动/联通/电信，取决于 ML307 核心板版本）：
 
-- ESP32-C3开发板，当前选用[ESP32-C3 Super Mini](https://item.taobao.com/item.htm?id=852057780489&skuId=5813710390565)，¥9.5包邮
-- ML307R/C/A开发板，当前选用[小蓝鲸ML307R/C/A核心板](https://item.taobao.com/item.htm?id=797466121802&skuId=5722077108045)，¥16.3包邮
-- [4G FPC天线](https://item.taobao.com/item.htm?id=797466121802&skuId=5722077108045)，¥2，与核心板同购
+- **ESP32-C6 SuperMini**（4MB Flash、USB-C、板载 USB-Serial-JTAG）
+- **ML307R/C/A 核心板**（引出 UART、EN、SIM 卡槽和天线接口；建议选带 3.3V 串口电平的核心板）
+- **4G FPC 天线**（与核心板配套）
+- **Nano SIM 卡**（按需开通短信功能）
 
-若希望直接使用成品，可选直接购以下套件，支持移动/联通/电信卡：
-
-- [小蓝鲸WIFI短信宝](https://item.taobao.com/item.htm?id=1003711355912)
-- [4G FPC天线](https://item.taobao.com/item.htm?id=1003711355912&skuId=6162872574943)，与开发板同购
+也可以直接购买现成的 ML307 短信转发套件，把主控换成 ESP32-C6 SuperMini 即可。
 
 ## 硬件连接
 
-ESP32-C3 与 ML307R/C/A 通过串口（UART）连接，接线如下：
-
-```
-┌──────────────────────────────────────────────┐
-|                                              |
-|   ESP32-C3 Super Mini     ML307R/C/A核心板    |
-| ┌───────────────────┐    ┌─────────────────┐ |
-└─┼─ GPIO5 (MODEM_EN) │    │                 │ |
-  │       GPIO3 (TX) ─┼───►│ RX              │ |
-  │                   │    │             EN ─┼─┘
-  │       GPIO4 (RX) ◄┼────┤ TX              │ 
-  │                   │    │                 │ 
-  │              GND ─┼────┤ GND             │ 
-  │                   │    │                 │ 
-  │               5V ─┼────┤ VCC (5V)        |
-  │                   │    │                 │
-  └───────────────────┘    └─────────────────┘
-                           │                 │
-                           │  SIM卡槽         │
-                           │  (插入Nano SIM)  │
-                           │                 │
-                           │  天线接口        │
-                           │  (连接4G天线)    │
-                           └─────────────────┘
-```
-
-模块 EN 引脚与 ESP32-C3 的 GPIO5 连接，可通过软件控制模块上下电。可通过 USB 连接 ESP32-C3 进行编程和供电，正常工作时虚拟串口数据将直接转发至 ML307R/C/A，方便调试。
-
-## ESP32-C6 SuperMini 移植说明
-
-若你使用的是 **ESP32-C6 SuperMini（4MB Flash）**，可直接使用本仓库（无需改代码），接线与 C3 不同，见下表。
-
-### 接线（ESP32-C6 SuperMini ↔ ML307R/C/A）
-
-按 ML307 模块与 C6 SuperMini 的插针位置接线：模块 EN 直插 GPIO19，RX/TX 飞线到 GPIO20/14。
+ESP32-C6 SuperMini 与 ML307R/C/A 通过 UART 连接：
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -166,7 +124,7 @@ ESP32-C3 与 ML307R/C/A 通过串口（UART）连接，接线如下：
 
 > 如需改引脚，编辑 [`src/main.cpp`](src/main.cpp) 顶部的 `TXD/RXD/MODEM_EN_PIN` 宏即可（GPIO20/14 均为 C6 普通 GPIO，无 strapping/JTAG/Flash 复用，可直接用于 UART）。
 
-### 编译与烧录（C6）
+## 编译与烧录
 
 ```bash
 # 编译（default_envs 已指向 C6，直接 pio run 即可）
@@ -186,9 +144,7 @@ pip install "esptool>=4.8"
 esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
 ```
 
-> 注意 C6 的 `--chip` 参数是 `esp32c6`（C3 才是 `esp32c3`）。
-
-## Release 与在线升级（仅 C6）
+## Release 与在线升级
 
 - 推送到 `master` 后，GitHub Actions 会自动构建 C6 固件并发布 Release（`full-*.bin`、`update-*.bin`、`ota-*.bin`、`littlefs-*.bin`、`firmware-*.elf`）。
 - 固件内的在线升级地址由 CI 注入为当前仓库，例如 `https://github.com/<owner>/<repo>/releases`。
@@ -198,13 +154,13 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
   OTA_GITHUB_REPO=<owner>/<repo> pio run -e esp32c6_supermini
   ```
 
-- ESP32-C3 构建关闭在线升级（本 fork 只发布 C6 固件），C3 请使用上游仓库的 Release。
+- 也可以在工具箱里「手动上传固件（`ota-*.bin`）」完成离线升级。
 
 ## 快速开始
 
 ### 方式一：图形化烧录（推荐，零安装）
 
-1. 从 [GitHub Releases](../../releases/latest) 下载最新版固件压缩包，解压获得 `full.bin`
+1. 从 [GitHub Releases](../../releases/latest) 下载最新版固件，解压获得 `full.bin`
 2. 使用 Chrome 或 Edge 浏览器（88+）打开 [ESPConnect](https://thelastoutpostworkshop.github.io/ESPConnect/)
 3. 波特率选择 `460800`
 4. 点击「连接」，在浏览器弹窗中选择 "USB JTAG/serial debug unit" 设备
@@ -226,8 +182,9 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x3B0000 littlefs.bin
 
 | 文件 | 用途 | 烧录地址 |
 |------|------|---------|
-| `full.bin` | 全量固件（bootloader + partitions + firmware + Web UI），首次烧录推荐 | `0x0` |
-| `main.bin` | 主固件（bootloader + partitions + firmware），不含 Web UI | `0x0` |
+| `full.bin` | 全量固件（bootloader + 分区表 + 固件 + Web UI），首次烧录推荐 | `0x0` |
+| `update.bin` | 升级固件（含 Web UI，保留 WiFi/配置） | `0x10000` |
+| `ota.bin` | 仅应用分区，工具箱手动上传用 | OTA 分区 |
 | `littlefs.bin` | 仅 Web UI 文件系统，更新页面时单独使用 | `0x3B0000` |
 
 ## 首次配置
@@ -239,31 +196,26 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x3B0000 littlefs.bin
 5. 默认 Web 界面账号/密码为 `admin / admin123`，请尽快修改
 6. 在推送通道区域添加并配置推送方式，保存配置
 
-
 ## 引脚定义
-
-### Maker Go ESP32-C3 Supermini
-
-- [makergo_esp32c3_supermini.json](boards/makergo_esp32c3_supermini.json)
-- [pins_arduino.h](custom_variants/super_mini_esp32c3/pins_arduino.h)
-
-### ESP32-C6 SuperMini（本仓库新增）
 
 - [esp32c6_supermini.json](boards/esp32c6_supermini.json)
 - [pins_arduino.h](custom_variants/super_mini_esp32c6/pins_arduino.h)
 
 ## 软件组成
 
-**ESP32-C3（C++17，PlatformIO）**：
+**ESP32-C6（C++17，PlatformIO）**：
 
 - `src/config/` — 配置结构体，NVS（非易失存储）读写，字段校验
 - `src/push/` — 推送通道分发，12 种推送类型实现，消息模板渲染
-- `src/email/` — SMTP 邮件发送（ReadyMail）
 - `src/sms/` — UART 读取，PDU 格式解析（pdulib），长短信重组
 - `src/http/` — HTTP 路由（ESPAsyncWebServer），Basic Auth，API 控制器
 - `src/sim/` — SIM 卡 AT 指令，状态机，热插拔，运营商/号码查询
 - `src/wifi/` — 多 WiFi 有序连接，AP 模式管理
 - `src/time/` — 时间同步（SIM NITZ + NTP）
+- `src/call/` — 来电事件处理
+- `src/ota/` — 在线升级与本地固件/LittleFS 写入
+- `src/logger/` — 串口/文件/内存环形缓冲日志
+- `src/common/` — 通用助手（NVS、看门狗封装等）
 - `data/index.html` — 配置管理页面（LittleFS）
 - `data/tools.html` — 工具箱页面（LittleFS）
 
@@ -273,11 +225,9 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x3B0000 littlefs.bin
 
 | 库 | 用途 |
 |----|------|
-| `pdulib@^0.5.11` | PDU 格式短信解析 |
-| `ReadyMail@^0.3.8` | SMTP 邮件发送 |
 | `ESPAsyncWebServer` | 异步 HTTP Web 服务 |
-| `ArduinoJson@^7.4.0` | JSON 序列化/反序列化 |
-
+| `ArduinoJson` | JSON 序列化/反序列化 |
+| `pdulib`（仓库内置） | PDU 格式短信解析 |
 
 ## 本地构建
 
@@ -290,26 +240,33 @@ pip install platformio
 **克隆仓库**：
 
 ```bash
-git clone https://github.com/maxming2333/esp32-sms-forwarding.git
-cd esp32-sms-forwarding
+git clone https://github.com/tong2568/esp32c6-sms-forwarding.git
+cd esp32c6-sms-forwarding
 ```
 
 **编译固件**：
 
 ```bash
-pio run
+pio run -e esp32c6_supermini
 ```
 
 **烧录固件**：
 
 ```bash
-pio run -t upload
+pio run -e esp32c6_supermini -t upload
 ```
 
 **构建并上传 LittleFS（Web UI 文件系统）**：
 
 ```bash
-pio run -t uploadfs
+pio run -e esp32c6_supermini -t uploadfs
 ```
 
-> `uploadfs` 会先通过 Python 脚本 gzip 压缩 `data/` 目录下的 HTML 文件，再上传至 ESP32 的 LittleFS 分区（地址 `0x3B0000`）。
+> `uploadfs` 会先通过 Python 脚本 gzip 压缩 `data/` 目录下的 HTML 文件，再上传至 ESP32-C6 的 LittleFS 分区（地址 `0x3B0000`）。
+
+## 已知限制
+
+- 仅提供 ESP32-C6 SuperMini（4MB Flash）固件与分区表；其它 Flash 容量需自行调整 `partitions.csv`。
+- BluFi（BLE 配网）不可用，请使用 AP 热点 + 网页配网。
+- 为兼容 WPA2/WPA3 混合路由，固件固定使用 WPA2 连接；纯 WPA3 网络无法连接。
+- 蜂窝数据默认关闭；如需使用 Ping 等数据功能，请在网页中手动开启「数据流量」。
