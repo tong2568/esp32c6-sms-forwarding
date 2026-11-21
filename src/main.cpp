@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 
 #include "wifi/wifi_manager.h"
 #include "logger/logger.h"
@@ -20,10 +21,26 @@
 #include "coredump/coredump.h"
 #include <time.h>
 
-// Serial port mapping
-#define TXD 3
-#define RXD 4
-#define MODEM_EN_PIN 5
+// Serial port mapping（模组 UART + 使能引脚）
+//
+//   TXD         —— ESP32 串口 TX → ML307R/C/A 的 RX
+//   RXD         —— ESP32 串口 RX ← ML307R/C/A 的 TX
+//   MODEM_EN_PIN—— ML307R/C/A 的 EN（软件上下电，低=关/高=开）
+//
+// ESP32-C6 SuperMini 接线（ML307 模块 EN 直插 GPIO19，RX/TX 飞线到 GPIO20/14）：
+//   GPIO19 (EN)  ← ML307 EN
+//   GPIO20 (TX)  → ML307 RX
+//   GPIO14 (RX)  ← ML307 TX
+// 注：GPIO20/GPIO14 均为 C6 的普通 GPIO，无 strapping/JTAG/Flash 复用，可直接用于 UART。
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(ARDUINO_SUPER_MINI_ESP32C6)
+  #define TXD          20
+  #define RXD          14
+  #define MODEM_EN_PIN 19
+#else
+  #define TXD          3
+  #define RXD          4
+  #define MODEM_EN_PIN 5
+#endif
 
 AsyncWebServer server(80);
 
@@ -57,7 +74,7 @@ static void delayWithWdt(unsigned long ms) {
   while (elapsed < ms) {
     unsigned long step = min((unsigned long)500, ms - elapsed);
     delay(step);
-    esp_task_wdt_reset();
+    taskWdtReset();
     elapsed += step;
   }
 }
@@ -80,7 +97,7 @@ static void modemPowerCycle() {
 
 void setup() {
   // 立即喂狗：框架初始化可能已消耗部分 TWDT 窗口
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
@@ -106,7 +123,7 @@ void setup() {
   ConfigStore::load();
   Coredump::init();  // 断电重启时从 NVS 恢复崩溃时间估算
   ConfigStore::loadReboot(rebootSchedule);
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   // WiFi
   // 必须排在 Sim::init() 之前：SIM 初始化（CPIN/CFUN/CNUM/模组配置）是同步阻塞的，
@@ -114,7 +131,7 @@ void setup() {
   // （见 Sim::tick），所以这里换序后开机到拿到 IP 只剩模组上电 + WiFi 自身耗时。
   WifiManager::setReconnectCallback([]{ TimeSync::syncNTP(); });
   WifiManager::init();
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   // 时间同步：STA 模式下优先使用 NTP；AP 模式下等 SIM 就绪后从 NITZ 同步
   if (WifiManager::mode() == WIFI_MODE_STA_CONNECTED) {
@@ -130,7 +147,7 @@ void setup() {
 
   // LittleFS — formatOnFail=true 保证首次烧录或分区损坏时自动格式化
   // 格式化操作可能耗时数秒，需在前后喂狗
-  esp_task_wdt_reset();
+  taskWdtReset();
   if (!LittleFS.begin(true)) {
     LOG("MAIN", "LittleFS 挂载失败，HTML 页面不可用");
   } else {
@@ -141,7 +158,7 @@ void setup() {
     Logger::init(kLogFileSkip);
     Logger::setStorageEnabled(config.logFileEnabled);
   }
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   HttpServer::setup(server);
   Ota::init();
@@ -155,7 +172,7 @@ void setup() {
   // 说明：HTTP 已先启动，若此刻有人访问网页的 AT 工具，SimDispatcher 队列尚未建立，
   // sendCommand() 会立即返回 false（提示无响应），不会访问 Serial1，无冲突风险。
   Sim::ensureFreshModemSession();   // 等 AT 就绪 + 保证卡会话是刚复位的干净状态
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   if (config.atBridgeEnabled) {
     // USB AT 透传模式：不启动 SimDispatcher，固件之后不再访问 Serial1，
@@ -164,7 +181,7 @@ void setup() {
     AtBridge::start();
   } else {
     Sim::init();
-    esp_task_wdt_reset();
+    taskWdtReset();
     Sim::startReaderTask();
   }
 

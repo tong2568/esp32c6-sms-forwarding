@@ -4,6 +4,17 @@
 #include "wifi/wifi_manager.h"
 #include "../logger/logger.h"
 #include <Arduino.h>
+
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(ARDUINO_SUPER_MINI_ESP32C6)
+// 当前 PlatformIO 平台的 arduino-esp32 3.x 已将 BLE 主机栈从 Bluedroid 切换为 NimBLE，
+// C3 与 C6 都不再提供 esp_gap_ble_api.h / esp_bt_main.h / esp_bluedroid 等 Bluedroid 主机
+// API，因此依赖 Bluedroid 的 BluFi 配网无法编译。这里对 C3/C6 统一禁用。
+// AP 模式下仍可通过网页 http://192.168.4.1 完成 WiFi 配置，功能不受影响。
+// 若需在旧版 arduino-esp32 2.x（仍带 Bluedroid）上启用 BluFi，可把下面的 #if 条件改为
+// 只保留 C6 分支，并在 platformio.ini 中把 platform 固定为旧版本（但旧版不支持 ESP32-C6）。
+void Blufi::init()   { LOG("BLUFI", "当前工具链无 Bluedroid，BluFi 已禁用（请用网页配置 WiFi）"); }
+void Blufi::deinit() { }
+#else
 #include <esp_blufi_api.h>
 extern "C" {
 #include <esp_blufi.h>  // esp_blufi_adv_start/stop；该头文件缺少 extern "C" 保护，需手动包裹
@@ -272,3 +283,4 @@ void Blufi::deinit() {
   s_blufiInitialized = false;
   LOG("BLUFI", "BluFi 已关闭");
 }
+#endif  // !(CONFIG_IDF_TARGET_ESP32C3/C6)

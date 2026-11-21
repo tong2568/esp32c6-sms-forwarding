@@ -19,6 +19,9 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      # 让固件内置的在线升级地址指向当前仓库的 Releases（而不是上游）
+      OTA_GITHUB_REPO: ${{ github.repository }}
 
     steps:
       - name: Checkout repository
@@ -73,7 +76,7 @@ jobs:
         run: pip install "esptool>=4.8"
 
       - name: Build firmware
-        run: pio run -e makergo_esp32c3_supermini
+        run: pio run -e esp32c6_supermini
 
       - name: Compress data/ for LittleFS
         if: github.event_name != 'pull_request'
@@ -81,7 +84,7 @@ jobs:
 
       - name: Build LittleFS image
         if: github.event_name != 'pull_request'
-        run: pio run -e makergo_esp32c3_supermini -t buildfs
+        run: pio run -e esp32c6_supermini -t buildfs
 
       - name: Restore data/ directory
         if: github.event_name != 'pull_request'
@@ -90,12 +93,12 @@ jobs:
       - name: Merge firmware binaries
         if: github.event_name != 'pull_request'
         run: |
-          BUILD_DIR=".pio/build/makergo_esp32c3_supermini"
+          BUILD_DIR=".pio/build/esp32c6_supermini"
           # full-{VERSION_TAG}.bin: 首次安装用（含 bootloader + 分区表，会清空 NVS）
           # 使用 --flash_mode keep --flash_freq keep 避免覆盖 bootloader 内部已编译的
           # flash 参数字节，防止使 ESP-IDF 附加的 SHA256 摘要失效（否则 ROM 校验失败
           # 导致 ets_loader.c 78 崩溃并死循环重启）
-          esptool --chip esp32c3 merge_bin \
+          esptool --chip esp32c6 merge_bin \
             --flash_mode keep --flash_freq keep --flash_size 4MB \
             -o "${BUILD_DIR}/full-${VERSION_TAG}.bin" \
             0x0      "${BUILD_DIR}/bootloader.bin" \
@@ -103,7 +106,7 @@ jobs:
             0x10000  "${BUILD_DIR}/firmware.bin" \
             0x3B0000 "${BUILD_DIR}/littlefs.bin"
           # update-{VERSION_TAG}.bin: 升级用（从 0x10000 开始，跳过 NVS，保留 WiFi 等配置）
-          esptool --chip esp32c3 merge_bin \
+          esptool --chip esp32c6 merge_bin \
             --flash_mode keep --flash_freq keep --flash_size 4MB \
             --target-offset 0x10000 \
             -o "${BUILD_DIR}/update-${VERSION_TAG}.bin" \
@@ -119,7 +122,7 @@ jobs:
       - name: Generate release notes
         if: github.event_name != 'pull_request'
         run: |
-          BUILD_DIR=".pio/build/makergo_esp32c3_supermini"
+          BUILD_DIR=".pio/build/esp32c6_supermini"
           HASH_FULL=$(sha256sum "${BUILD_DIR}/full-${VERSION_TAG}.bin" | awk '{print $1}')
           HASH_UPDATE=$(sha256sum "${BUILD_DIR}/update-${VERSION_TAG}.bin" | awk '{print $1}')
           HASH_LITTLEFS=$(sha256sum "${BUILD_DIR}/littlefs-${VERSION_TAG}.bin" | awk '{print $1}')
@@ -132,7 +135,7 @@ jobs:
           |------|-----|
           | Commit | ${FULL_SHA} |
           | 构建时间 | ${TIMESTAMP} |
-          | 目标设备 | MakerGO ESP32-C3 SuperMini |
+          | 目标设备 | ESP32-C6 SuperMini (4MB) |
 
           ## 文件说明
 
@@ -175,17 +178,17 @@ jobs:
 
           **首次安装**（新设备或需要重置所有配置）：
           \`\`\`bash
-          esptool --chip esp32c3 --baud 921600 write_flash 0x0 full-${VERSION_TAG}.bin
+          esptool --chip esp32c6 --baud 921600 write_flash 0x0 full-${VERSION_TAG}.bin
           \`\`\`
 
           **固件升级**（保留 WiFi 等配置，推荐日常更新）：
           \`\`\`bash
-          esptool --chip esp32c3 --baud 921600 write_flash 0x10000 update-${VERSION_TAG}.bin
+          esptool --chip esp32c6 --baud 921600 write_flash 0x10000 update-${VERSION_TAG}.bin
           \`\`\`
 
           **仅更新 Web UI**（保留固件和配置）：
           \`\`\`bash
-          esptool --chip esp32c3 --baud 921600 write_flash 0x3B0000 littlefs-${VERSION_TAG}.bin
+          esptool --chip esp32c6 --baud 921600 write_flash 0x3B0000 littlefs-${VERSION_TAG}.bin
           \`\`\`
 
           ## SHA256 校验
@@ -209,11 +212,11 @@ jobs:
           make_latest: "true"
           fail_on_unmatched_files: true
           files: |
-            .pio/build/makergo_esp32c3_supermini/full-${{ env.VERSION_TAG }}.bin
-            .pio/build/makergo_esp32c3_supermini/update-${{ env.VERSION_TAG }}.bin
-            .pio/build/makergo_esp32c3_supermini/littlefs-${{ env.VERSION_TAG }}.bin
-            .pio/build/makergo_esp32c3_supermini/ota-${{ env.VERSION_TAG }}.bin
-            .pio/build/makergo_esp32c3_supermini/firmware-${{ env.VERSION_TAG }}.elf
+            .pio/build/esp32c6_supermini/full-${{ env.VERSION_TAG }}.bin
+            .pio/build/esp32c6_supermini/update-${{ env.VERSION_TAG }}.bin
+            .pio/build/esp32c6_supermini/littlefs-${{ env.VERSION_TAG }}.bin
+            .pio/build/esp32c6_supermini/ota-${{ env.VERSION_TAG }}.bin
+            .pio/build/esp32c6_supermini/firmware-${{ env.VERSION_TAG }}.elf
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -21,6 +21,12 @@ static char    s_fileBuf[Logger::FLUSH_LINES][Logger::LINE_LEN];
 static int     s_filePending   = 0;
 static time_t  s_lastFlushTime = 0;
 
+// 内存环形缓冲：无论是否开启文件日志，都记录最近 RING_LINES 条，
+// 供 /api/logs 在未开文件日志（或文件尚未生成）时回退读取。
+static char    s_ring[Logger::RING_LINES][Logger::LINE_LEN];
+static int     s_ringHead  = 0;   // 下一条写入位置
+static int     s_ringCount = 0;   // 当前有效行数（<= RING_LINES）
+
 // ---------- 文件轮转 ----------
 
 // 若写入 pendingBytes 后文件超限，则从文件顶部裁掉等量字节，保持文件大小恒定。
@@ -54,6 +60,14 @@ static void rotateIfNeeded(size_t pendingBytes) {
 static void writeToSerial(const char* line) {
   Serial.print(line);
   Serial.print("\r\n");
+}
+
+// 追加一行到内存环形缓冲（满则覆盖最旧行）
+static void ringAppend(const char* line) {
+  strncpy(s_ring[s_ringHead], line, Logger::LINE_LEN - 1);
+  s_ring[s_ringHead][Logger::LINE_LEN - 1] = '\0';
+  s_ringHead = (s_ringHead + 1) % Logger::RING_LINES;
+  if (s_ringCount < Logger::RING_LINES) s_ringCount++;
 }
 
 // 去重检查并更新状态，返回 true 表示是重复条目
@@ -144,6 +158,9 @@ void Logger::clearFile() {
   // 重置去重状态
   s_lastModule[0] = '\0';
   s_lastMsg[0]    = '\0';
+  // 重置内存环形缓冲
+  s_ringHead      = 0;
+  s_ringCount     = 0;
 }
 
 void Logger::log(const char* module, const char* fmt, ...) {
@@ -169,6 +186,9 @@ void Logger::log(const char* module, const char* fmt, ...) {
     writeToSerial(line);
   }
 
+  // --- 内存环形缓冲（始终记录最近若干条，/api/logs 可回退读取）---
+  ringAppend(line);
+
   // --- 文件（经暂存缓冲批量刷写，减少 Flash 磨损）---
   if (!s_storageEnabled) return;
   writeToStorage(line, module, msg, now);
@@ -189,4 +209,21 @@ std::shared_ptr<File> Logger::dumpStream(int n) {
     fp->readStringUntil('\n');  // 丢弃被 seek 截断的残行，确保从完整行开始
   }
   return fp;  // 调用方析构 shared_ptr 时 File 析构函数自动 close()
+}
+
+String Logger::dumpMemory(int n) {
+  if (n <= 0) n = Logger::RING_LINES;
+  if (n > s_ringCount) n = s_ringCount;
+  if (n <= 0) return String();
+
+  String out;
+  out.reserve((size_t)n * (Logger::LINE_LEN + 1));
+  // 环形缓冲按写入顺序展开：最旧的在 (head - count)，最新的在 head-1
+  int start = (s_ringHead - n + Logger::RING_LINES * 2) % Logger::RING_LINES;
+  for (int i = 0; i < n; i++) {
+    int idx = (start + i) % Logger::RING_LINES;
+    out += s_ring[idx];
+    out += '\n';
+  }
+  return out;
 }

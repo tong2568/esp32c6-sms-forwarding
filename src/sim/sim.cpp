@@ -7,6 +7,7 @@
 #include "push/push.h"
 #include "time/time_sync.h"
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 
 // ---------- internal state ----------
 
@@ -98,7 +99,7 @@ static bool runInitStep(const char* cmd, unsigned long timeout, int maxRetry, co
     }
     LOG("SIM", "%s 失败，重试 %d/%d", stepName, i + 1, maxRetry);
     delay(300);
-    esp_task_wdt_reset();
+    taskWdtReset();
   }
   LOG("SIM", "%s 最终失败", stepName);
   return false;
@@ -120,7 +121,7 @@ static bool atExchange(const char* cmd, unsigned long timeoutMs, String* outResp
     if (resp.indexOf("OK") >= 0)    { ok = true;  break; }
     if (resp.indexOf("ERROR") >= 0) { ok = false; break; }
     delay(5);
-    esp_task_wdt_reset();
+    taskWdtReset();
   }
   if (outResp != nullptr) *outResp = resp;
   return ok;
@@ -137,9 +138,9 @@ static bool waitAtReady(unsigned long timeoutMs) {
       LOG("SIM", "模组 AT 就绪（第 %d 次探测，耗时 %lu ms）", attempt, millis() - start);
       return true;
     }
-    esp_task_wdt_reset();
+    taskWdtReset();
     delay(200);
-    esp_task_wdt_reset();
+    taskWdtReset();
   }
   LOG("SIM", "模组 AT 在 %lu ms 内未就绪", timeoutMs);
   return false;
@@ -212,7 +213,7 @@ void Sim::ensureFreshModemSession() {
   LOG("SIM", "模组未被真正复位，执行软复位 AT+MREBOOT");
   atExchange("AT+MREBOOT", 3000, nullptr);
   delay(500);
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   if (!waitAtReady(15000)) {
     LOG("SIM", "软复位后模组仍未就绪，继续启动（SIM 可能不可用）");
@@ -487,6 +488,12 @@ static bool runModemConfig() {
   // 注意：该配置**不写入模组 NVM**，模组重启即丢失（实测 AT+MREBOOT 后 cause
   // 会从 15 退回 19），因此必须放在每次初始化都会执行的路径里。
   runInitStep("AT+CGDCONT=1,\"IP\",\"\"", 1000, 2, "默认PDP上下文(空APN)");
+
+  // 默认关闭蜂窝数据（安全加固）：尽早停用 PDP 上下文，避免无流量套餐的 SIM 卡
+  // 误连蜂窝数据产生扣费。本固件通知一律走 WiFi，不使用蜂窝数据；仅当用户在网页
+  // 手动开启 dataTraffic 后，注册完成的 simTrafficTick 才会再 AT+CGACT=1,1 重新打开。
+  // 注：上下文本已处于关闭状态时，模组对 AT+CGACT=0,1 会返回 ERROR，属预期，忽略即可。
+  sendATandWaitOK("AT+CGACT=0,1", 2000);
 
   // 短信消费归属由「胖/瘦模式」决定，见 Config::thinModeEnabled。
   //   胖模式 CNMI=2,2：新短信直投 TE 成为 +CMT: URC，**不进模组存储**，由本固件

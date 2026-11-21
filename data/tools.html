@@ -1271,12 +1271,17 @@
         var latestEl = document.getElementById("otaLatestVer");
         var onlineBtn = document.getElementById("otaOnlineBtn");
         var upToDate = document.getElementById("otaUpToDate");
+        var onlineArea = document.getElementById("otaOnlineArea");
 
         if (d.currentVersion) {
           curVerEl.textContent = d.currentVersion;
           otaCurrentVersion = d.currentVersion;
         }
-        if (d.latestVersion) {
+        if (d.onlineDisabled) {
+          // 在线升级已禁用（C6 与上游 C3 固件不兼容）：隐藏入口，避免误刷
+          if (onlineArea) onlineArea.style.display = "none";
+          latestEl.textContent = "—（在线升级已禁用）";
+        } else if (d.latestVersion) {
           latestEl.textContent = d.latestVersion;
           otaLatestVersion = d.latestVersion;
         } else if (d.state === "checking") latestEl.textContent = "检查中...";
@@ -1300,8 +1305,8 @@
           if (!otaInUpgrade) progress.style.display = "none";
         }
 
-        // 版本比较（仅 idle/failed 且有 latestVersion 时显示按钮）
-        if (d.latestVersion && d.currentVersion) {
+        // 版本比较（仅 idle/failed 且有 latestVersion 时显示按钮；在线升级禁用时跳过）
+        if (!d.onlineDisabled && d.latestVersion && d.currentVersion) {
           if (d.latestVersion !== d.currentVersion) {
             latestEl.textContent = d.latestVersion + " 🆕";
             onlineBtn.disabled = false;
@@ -1362,6 +1367,8 @@
           })
           .then(function (d) {
             renderOtaStatus(d);
+            // 在线升级已禁用时不启动轮询
+            if (d.onlineDisabled) return;
             // 只要版本号还没拿到就启动轮询（后端任务异步启动，首次响应可能仍是 idle+空版本）
             if (!d.latestVersion) {
               startOtaPolling();

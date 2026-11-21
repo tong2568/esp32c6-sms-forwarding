@@ -27,6 +27,7 @@ static void serializeOtaStatus(const OtaStatusPayload& p, JsonObject& root) {
     root["message"]        = p.message;
     root["currentVersion"] = p.currentVersion;
     root["latestVersion"]  = p.latestVersion;
+    root["onlineDisabled"] = p.onlineDisabled;
 }
 
 // ── GET /api/ota/status ───────────────────────────────────────────
@@ -62,6 +63,11 @@ void otaVersionController(AsyncWebServerRequest* request) {
 
 // ── POST /api/ota/start ───────────────────────────────────────────
 void otaStartController(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+    // 在线升级已禁用（C6 与上游 C3 固件不兼容）
+    if (!ONLINE_UPGRADE_ENABLED) {
+        JsonResp::err(request, 403, "在线升级已禁用（C6 与上游 C3 固件不兼容，请使用手动上传）");
+        return;
+    }
     const char* body = nullptr;
     if (!httpAccumulateBody(request, data, len, index, total, HTTP_JSON_BODY_MAX_BYTES, &body)) return;
     if (body == nullptr) return;

@@ -1,6 +1,7 @@
 #include "sim_dispatcher.h"
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 #include <strings.h>
 #include <new>
 #include "../logger/logger.h"
@@ -377,10 +378,10 @@ bool SimDispatcher::sendCommand(const char* cmd, unsigned long timeoutMs,
     // （如 AT+COPS=? 全网扫描）会让该任务整整 5s 不喂狗，直接触发
     // "Task watchdog got triggered" 而 abort 重启。
     // 因此改为分段等待：每 200ms 醒一次喂狗，但**永不提前返回**。
-    // 注：未订阅 TWDT 的任务（如 sim_reader）调用 esp_task_wdt_reset()
-    // 会返回 ESP_ERR_NOT_FOUND，无副作用，故忽略返回值。
+    // 未订阅 TWDT 的任务直接喂狗会打印 "task not found" 刷屏；
+    // 改用 taskWdtReset() 安全封装（见 common/task_wdt.h），先检查订阅状态再喂狗。
     while (xSemaphoreTake(slot->doneSem, pdMS_TO_TICKS(200)) != pdTRUE) {
-        esp_task_wdt_reset();
+        taskWdtReset();
     }
     vSemaphoreDelete(slot->doneSem);
 

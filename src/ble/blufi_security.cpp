@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <mbedtls/dhm.h>
 #include <mbedtls/aes.h>
+#include <mbedtls/version.h>
 #include <esp_crc.h>
 #include <esp_random.h>
 
@@ -47,7 +48,13 @@ void blufi_dh_negotiate_data_handler(uint8_t *data, int len,
         return;
     }
 
-    size_t   keyLen  = s_dhm.len;  // mbedtls 2.x 直接字段访问（3.x 用 mbedtls_dhm_get_len）
+#if defined(MBEDTLS_VERSION_MAJOR) && MBEDTLS_VERSION_MAJOR >= 3
+    // mbedtls 3.x 将 mbedtls_dhm_context 字段私有化，改用 getter 获取模数长度
+    size_t   keyLen  = mbedtls_dhm_get_len(&s_dhm);
+#else
+    // mbedtls 2.x 可直接访问 len 字段
+    size_t   keyLen  = s_dhm.len;
+#endif
     uint8_t *selfPub = (uint8_t*)malloc(keyLen);
     if (!selfPub) return;
 

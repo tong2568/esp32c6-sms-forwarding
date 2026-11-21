@@ -8,6 +8,7 @@
 #include <ArduinoJson.h>
 #include <esp_random.h>
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 
 // 会话有效期。每条命令前后都会续期，因此只在「对端消失」时才真正到期。
 // 取 30s 是为了让一次丢包造成的泄漏窗口足够短：对端的 DELETE 是 best-effort，
@@ -294,7 +295,7 @@ void atBridgeExchangeController(AsyncWebServerRequest* request, uint8_t* data,
   bool gotPrompt = false, earlyTerminal = false;
   String lineBuf;
   while (millis() - start < BRIDGE_PROMPT_TIMEOUT_MS) {
-    esp_task_wdt_reset();
+    taskWdtReset();
     if (!Serial1.available()) {
       // 让出 CPU：本回调运行在 async_tcp 任务上下文，纯自旋会触发该任务看门狗。
       delay(5);
@@ -334,7 +335,7 @@ void atBridgeExchangeController(AsyncWebServerRequest* request, uint8_t* data,
   bool terminal = false;
   lineBuf = "";
   while (millis() - start < timeoutMs) {
-    esp_task_wdt_reset();
+    taskWdtReset();
     if (!Serial1.available()) { delay(5); continue; }
     char c = Serial1.read();
     if (c == '\r') continue;

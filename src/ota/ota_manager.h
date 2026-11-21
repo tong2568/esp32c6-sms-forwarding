@@ -19,10 +19,24 @@ struct OtaStatusPayload {
   String   message        = "";    // 失败原因或当前阶段说明
   String   currentVersion = "";    // 当前固件版本
   String   latestVersion  = "";    // 远端最新版本（仅 CHECKING 完成后）
+  bool     onlineDisabled = false; // true = 在线升级已禁用（C6 构建）
 };
 
-// GitHub Release 基础 URL（拼接 tag 得到具体下载地址）
-static const char* const OTA_RELEASES_BASE_URL = "https://github.com/maxming2333/esp32-sms-forwarding/releases";
+// GitHub Release 基础 URL（拼接 tag 得到具体下载地址）。
+// 可由编译期宏覆盖：CI 通过 OTA_GITHUB_REPO 注入当前仓库（见 script/inject_ota_url.py），
+// 本地构建也可用 `OTA_GITHUB_REPO=owner/repo pio run` 覆盖；未设置时回退到上游仓库。
+#ifndef OTA_RELEASES_BASE_URL
+#define OTA_RELEASES_BASE_URL "https://github.com/maxming2333/esp32-sms-forwarding/releases"
+#endif
+
+// 在线升级（从 GitHub Releases 下载固件）是否启用。
+// 本 fork 的 Release 只发布 ESP32-C6 固件：C6 构建开启在线升级；
+// C3 构建关闭（避免 C3 设备刷入 C6 包），C3 请使用上游仓库的 Release。
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(ARDUINO_SUPER_MINI_ESP32C6)
+static constexpr bool ONLINE_UPGRADE_ENABLED = true;
+#else
+static constexpr bool ONLINE_UPGRADE_ENABLED = false;
+#endif
 // OTA 后台任务栈/优先级：
 //   - 12 KiB 栈：HTTPS 下载 + mbedTLS 握手栈占用较高，实测低于此值会爆栈
 //   - 优先级 1：低于 SIM Reader（3），高于 idle，避免抢占短信处理

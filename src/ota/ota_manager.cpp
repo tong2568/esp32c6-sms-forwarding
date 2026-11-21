@@ -2,6 +2,7 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <LittleFS.h>
+#include <WiFiClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "../logger/logger.h"
@@ -63,6 +64,7 @@ OtaStatusPayload Ota::status() {
     p.message        = g_message;
     p.currentVersion = g_currentVer;
     p.latestVersion  = g_latestVer;
+    p.onlineDisabled = !ONLINE_UPGRADE_ENABLED;
     return p;
 }
 
@@ -361,6 +363,8 @@ static void onlineUpgradeTask(void* param) {
 
 // ── Ota::startVersionCheck ──────────────────────────────────────────
 void Ota::startVersionCheck() {
+    // 在线升级已禁用（C6）：不发起任何网络查询
+    if (!ONLINE_UPGRADE_ENABLED) return;
     if (g_inProgress) return;
     unsigned long now = millis();
     if (g_lastCheckMs != 0 && now - g_lastCheckMs < OTA_CHECK_DEBOUNCE_MS) return;
@@ -373,6 +377,13 @@ void Ota::startVersionCheck() {
 
 // ── Ota::startOnlineUpgrade ─────────────────────────────────────────
 bool Ota::startOnlineUpgrade(const String& targetTag) {
+    // 在线升级已禁用（C6 与上游 C3 固件不兼容）
+    if (!ONLINE_UPGRADE_ENABLED) {
+        g_state   = OtaState::FAILED;
+        g_message = "在线升级已禁用（C6 与上游 C3 固件不兼容，请使用手动上传）";
+        LOG("OTA", "在线升级已禁用，拒绝升级请求: %s", targetTag.c_str());
+        return false;
+    }
     if (targetTag.isEmpty()) return false;
     if (g_inProgress) return false;
 

@@ -8,6 +8,7 @@ public:
   // 内存缓冲参数
   static constexpr int    DUMP_DEFAULT_LINES = 200;  // dump() 默认返回行数
   static constexpr int    LINE_LEN           = 160;
+  static constexpr int    RING_LINES         = 64;   // 内存环形缓冲保留的最近日志行数
 
   // 模块名对齐宽度（printf %-*s 的宽度值）
   static constexpr int    MODULE_PAD         = 8;
@@ -43,6 +44,10 @@ public:
   // flush 后返回已 seek 到位的文件句柄（shared_ptr 保证跨 async 生命周期安全）。
   // 文件不存在时返回 nullptr；调用方析构 shared_ptr 时 File 自动 close()。
   static std::shared_ptr<File> dumpStream(int n = DUMP_DEFAULT_LINES);
+
+  // 从内存环形缓冲取最近 n 行（n<=0 或超过实际行数时自动裁剪），返回 '\n' 分隔文本。
+  // 用于未开启「写入日志文件」（或文件尚未生成）时，/api/logs 仍能查看最近日志。
+  static String dumpMemory(int n = DUMP_DEFAULT_LINES);
 };
 
 // Usage: LOG("WiFi", "Connected to %s", ssid)

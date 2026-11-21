@@ -10,7 +10,11 @@ void logsController(AsyncWebServerRequest* request) {
 
   auto fp = Logger::dumpStream(n);
   if (!fp || !*fp) {
-    request->send(200, "text/plain; charset=utf-8", "");
+    // 未开启「写入日志文件」或文件尚未生成：回退到内存环形缓冲，
+    // 保证 /api/logs 始终能看到最近若干条日志，而不是空白页。
+    String mem = Logger::dumpMemory(n);
+    if (mem.length() == 0) mem = "(暂无日志)\n";
+    request->send(200, "text/plain; charset=utf-8", mem);
     return;
   }
   // lambda 按值捕获 shared_ptr：响应期间引用计数 >= 1，句柄不会提前关闭；

@@ -7,6 +7,7 @@
 #include <pdulib.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -187,7 +188,7 @@ static bool sendOnePDU(const char* phoneNumber, const char* message, unsigned sh
   unsigned long start = millis();
   bool gotPrompt = false;
   while (millis() - start < 5000) {
-    esp_task_wdt_reset();
+    taskWdtReset();
     if (Serial1.available()) {
       char c = Serial1.read();
       if (c == '>') { gotPrompt = true; break; }
@@ -212,7 +213,7 @@ static bool sendOnePDU(const char* phoneNumber, const char* message, unsigned sh
   unsigned long cmgsSeenAt = 0;
 
   while (millis() - start < 30000) {
-    esp_task_wdt_reset();
+    taskWdtReset();
     while (Serial1.available()) {
       char c = Serial1.read(); resp += c;
       if (!cmgsSeen && resp.indexOf("+CMGS:") >= 0) {
@@ -968,7 +969,7 @@ static void smsProcTask(void*) {
       }
       delete item;
     }
-    esp_task_wdt_reset();
+    taskWdtReset();
   }
 }
 

@@ -2,7 +2,9 @@
 #include "ble/blufi.h"
 #include <WiFi.h>
 #include <esp_task_wdt.h>
+#include "common/task_wdt.h"
 #include <esp_wifi.h>
+#include <esp_event.h>
 #include "config/config.h"
 #include "../logger/logger.h"
 
@@ -26,6 +28,58 @@ static int           s_reconnAttempt  = 0;
 static unsigned long s_lastAttemptMs  = 0;
 static unsigned long s_apRescanNextMs = 0;     // 下次 AP 后台扫描触发时间戳
 static bool          s_reconnFromAP   = false;  // 本次重连是否来自 AP 恢复
+
+// ---------- WPA2 强制 + 断开原因日志 ----------
+
+// 常见断开原因码 → 可读描述（wifi_err_reason_t）
+static const char* wifiDisconnectReason(uint8_t reason) {
+  switch (reason) {
+    case 15:  return "4-way握手超时（密码错或加密不匹配）";
+    case 200: return "信标超时";
+    case 201: return "找不到AP（可能5GHz-only/信号弱/SSID不存在）";
+    case 202: return "认证失败";
+    case 203: return "关联失败";
+    case 204: return "握手超时";
+    case 205: return "连接失败";
+    case 211: return "认证模式不匹配（WPA3混合模式回退问题）";
+    default:  return "未知原因";
+  }
+}
+
+// STA 断开事件：把 reason 码打印到串口，方便排查连不上网的问题
+static void onWifiEvent(void* arg, esp_event_base_t base, int32_t id, void* data) {
+  if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    wifi_event_sta_disconnected_t* d = (wifi_event_sta_disconnected_t*)data;
+    LOG("WIFI", "STA断开: reason=%u（%s）", d->reason, wifiDisconnectReason(d->reason));
+  }
+}
+
+static bool s_wifiEventRegistered = false;
+static void ensureWifiEventLogging() {
+  if (s_wifiEventRegistered) return;
+  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &onWifiEvent, nullptr);
+  s_wifiEventRegistered = true;
+}
+
+// 强制用 WPA2 连接：
+// arduino-esp32 3.x / ESP-IDF 5.5 的驱动编译了 WPA3-SAE(H2E)，连 WPA2/WPA3 混合 AP
+// 时可能协商到 WPA3 而失败（Espressif 已知问题）。这里：
+//   1) 认证门槛设为 WPA2；
+//   2) 关闭 PMF —— WPA3-SAE 强制要求 PMF，关闭后 STA 无法协商 WPA3，只能回退 WPA2。
+// 路由器对手机等其它设备仍可保留 WPA3。
+static void beginWpa2(const char* ssid, const char* pass) {
+  WiFi.setMinSecurity(WIFI_AUTH_WPA2_PSK);
+  WiFi.begin(ssid, pass, 0, nullptr, false);  // 先建配置（含 DHCP），暂不连接
+
+  wifi_config_t conf;
+  memset(&conf, 0, sizeof(conf));
+  if (esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+    conf.sta.pmf_cfg.capable  = false;   // 不声明 PMF → 无法协商 WPA3
+    conf.sta.pmf_cfg.required = false;
+    esp_wifi_set_config(WIFI_IF_STA, &conf);
+  }
+  esp_wifi_connect();
+}
 
 // 利用已完成的 WiFi 扫描结果，将 config.wifiList 下标重排到 outOrder[]
 // - 可见 SSID 的下标按信号强度（RSSI 降序）排列在前
@@ -90,12 +144,16 @@ static void setupSTAMode() {
   WiFi.setHostname(WifiManager::deviceName().c_str());
   WiFi.mode(WIFI_STA);
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA2_PSK);  // 认证门槛 WPA2（配合 beginWpa2 的 PMF 关闭强制 WPA2）
 }
 
 static void enterAPMode() {
   WiFi.softAP(kApSsid);
-  // AP 模式下必须启用 Modem Sleep，否则 WiFi 持续占用射频，BLE 无法发送广播包
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+  // 原代码为了 BluFi(BLE) 共存开启 Modem Sleep，让 WiFi 让出射频给 BLE 广播。
+  // 当前工具链（arduino-esp32 3.x）已无 Bluedroid、BluFi 被禁用，无需再让射频；
+  // 而 AP 模式下 Modem Sleep 会让射频在无连接时休眠，客户端发起的 probe/关联请求
+  // 可能被漏掉，表现为「能搜到热点但连不上」。这里改为关闭省电，让 AP 保持常醒。
+  esp_wifi_set_ps(WIFI_PS_NONE);
   s_mode           = WIFI_MODE_AP_ACTIVE;
   s_initDone       = true;
   s_reconnState    = RECONNECT_IDLE;       // 清除可能残留的扫描等待状态
@@ -115,11 +173,13 @@ void WifiManager::init() {
   s_everConnected  = false;
   s_initDone       = false;
 
+  ensureWifiEventLogging();  // 注册断开原因日志（首次生效）
+
   // 软重启（ESP.restart）后 WiFi 驱动状态可能残留，强制关闭后再初始化
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   delay(500);
-  esp_task_wdt_reset();
+  taskWdtReset();
 
   if (config.wifiCount == 0) {
     LOG("WIFI", "未配置任何WiFi，直接进入AP模式");
@@ -132,7 +192,7 @@ void WifiManager::init() {
 
   // 扫描当前环境 WiFi，优先连接可见 SSID
   WiFi.scanNetworks(false);  // 阻塞扫描，此处处于 setup() 或 AP 恢复前，WDT 已有保护
-  esp_task_wdt_reset();
+  taskWdtReset();
   int initOrder[MAX_WIFI_ENTRIES] = {};
   int initMatchCount = buildSortedWifiOrder(initOrder, config.wifiCount);
   WiFi.scanDelete();  // 释放阻塞扫描结果内存（与 AP tick 路径保持一致）
@@ -147,7 +207,7 @@ void WifiManager::init() {
     LOG("WIFI", "尝试第 %d/%d 条WiFi: %s", w + 1, config.wifiCount, ssid);
 
     for (int attempt = 1; attempt <= WIFI_RECONNECT_ATTEMPTS_PER_SSID; attempt++) {
-      WiFi.begin(ssid, pass, 0, nullptr, true);
+      beginWpa2(ssid, pass);
       unsigned long start = millis();
       while (millis() - start < 10000) {
         if (WiFi.status() == WL_CONNECTED) {
@@ -159,7 +219,7 @@ void WifiManager::init() {
           return;
         }
         delay(100);
-        esp_task_wdt_reset();
+        taskWdtReset();
       }
 
       LOG("WIFI", "第 %d/%d 条WiFi，第 %d/%d 次连接超时", w + 1, config.wifiCount, attempt, WIFI_RECONNECT_ATTEMPTS_PER_SSID);
@@ -168,7 +228,7 @@ void WifiManager::init() {
       // ESP_ERR_WIFI_STATE（0x3014）"STA enable failed!" 的驱动状态竞争
       WiFi.disconnect(false);
       delay(500);
-      esp_task_wdt_reset();
+      taskWdtReset();
     }
   }
 
@@ -202,7 +262,7 @@ void WifiManager::tick() {
         // 关闭 AP，切到 STA 模式，交由非阻塞重连状态机处理
         WiFi.softAPdisconnect(true);
         delay(100);
-        esp_task_wdt_reset();
+        taskWdtReset();
         setupSTAMode();
         s_mode          = WIFI_MODE_RECONNECTING;
         s_reconnFromAP  = true;
@@ -265,7 +325,7 @@ void WifiManager::tick() {
         LOG("WIFI", "重连尝试 SSID: %s，第 %d/%d 次", ssid, s_reconnAttempt + 1, WIFI_RECONNECT_ATTEMPTS_PER_SSID);
         WiFi.disconnect(true);
         delay(300);
-        WiFi.begin(ssid, pass, 0, nullptr, true);
+        beginWpa2(ssid, pass);
         s_lastAttemptMs = millis();
         s_reconnState   = RECONNECT_CONNECTING;
       }
