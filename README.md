@@ -92,6 +92,15 @@
 | `{sim_slot}` | 卡槽标识 |
 | `{signal}` | 信号强度 |
 
+## 已知限制
+
+- 仅提供 ESP32-C6 SuperMini（4MB Flash）固件与分区表；其它 Flash 容量需自行调整 `partitions.csv`。
+- **BluFi（BLE 配网）不可用**，请使用 AP 热点 + 网页配网。
+- 为兼容 WPA2/WPA3 混合路由，固件固定使用 WPA2 连接；纯 WPA3 网络无法连接。
+- 蜂窝数据默认关闭；如需使用 Ping 等数据功能，请在网页中手动开启「数据流量」。
+- eSIM 查询/启用仅适用于**实体 eUICC 卡**；普通 SIM 或软 eSIM 会提示「未检测到 eUICC 应用」。
+- VoLTE/IMS 注册查询依赖模组的 `AT+CIREG` 支持；ML307A 的公开 AT 手册未列出该指令，若固件不支持则显示「无法查询」。
+
 ## 硬件搭配
 
 自行焊接参考（整机成本约 ¥30，支持移动/联通/电信，取决于 ML307 核心板版本）：
@@ -275,15 +284,6 @@ pio run -e esp32c6_supermini -t uploadfs
 ```
 
 > `uploadfs` 会先通过 Python 脚本 gzip 压缩 `data/` 目录下的 HTML 文件，再上传至 ESP32-C6 的 LittleFS 分区（地址 `0x3B0000`）。
-
-## 已知限制
-
-- 仅提供 ESP32-C6 SuperMini（4MB Flash）固件与分区表；其它 Flash 容量需自行调整 `partitions.csv`。
-- **BluFi（BLE 配网）不可用**，请使用 AP 热点 + 网页配网。
-- 为兼容 WPA2/WPA3 混合路由，固件固定使用 WPA2 连接；纯 WPA3 网络无法连接。
-- 蜂窝数据默认关闭；如需使用 Ping 等数据功能，请在网页中手动开启「数据流量」。
-- eSIM 查询/启用仅适用于**实体 eUICC 卡**；普通 SIM 或软 eSIM 会提示「未检测到 eUICC 应用」。
-- VoLTE/IMS 注册查询依赖模组的 `AT+CIREG` 支持；ML307A 的公开 AT 手册未列出该指令，若固件不支持则显示「无法查询」。
 
 ## 鸣谢
 
