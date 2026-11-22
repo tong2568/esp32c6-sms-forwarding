@@ -83,14 +83,13 @@ static void modemPowerCycle() {
   pinMode(MODEM_EN_PIN, OUTPUT);
   LOG("MAIN", "EN 拉低：关闭模组");
   digitalWrite(MODEM_EN_PIN, LOW);
-  delayWithWdt(1200);
+  // 2.5s：板上有较大储能电容，1.2s 往往放不干净，模组会「假掉电」并保留
+  // 上一次的逻辑通道/主动式会话，导致后续 AT+MREBOOT 被拒绝。
+  delayWithWdt(2500);
   LOG("MAIN", "EN 拉高：开启模组");
   digitalWrite(MODEM_EN_PIN, HIGH);
-  // 这里只做最小稳定延时，不再盲等固定时长：
-  // 拉高之后到 Sim::ensureFreshModemSession() 之间没有任何代码访问 Serial1
-  // （WiFi / NTP / LittleFS / HTTP 初始化都不碰模组），模组可以在那段时间里
-  // 并行启动；真正的「等 AT 就绪」由 ensureFreshModemSession 轮询完成。
-  delayWithWdt(500);
+  // 给模组电源轨和内部复位留出建立时间，再交给 ensureFreshModemSession 轮询 AT。
+  delayWithWdt(800);
 }
 
 // 供 sim 模块调用的硬复位兜底（AT+MREBOOT 被拒绝/无响应时使用）
