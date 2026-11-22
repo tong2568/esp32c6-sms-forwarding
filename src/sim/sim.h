@@ -14,6 +14,10 @@ enum SimState {
 
 constexpr unsigned long SIM_NUMBER_RETRY_INTERVAL_MS = 5000;
 
+// 由 main.cpp 实现：拉低 EN 再拉高，对模组做硬复位（掉电重启）。
+// 用于 AT+MREBOOT 被模组拒绝或软复位后仍无响应的兜底。
+void SimHardwarePowerCycle();
+
 // SIM 业务层：负责 SIM 生命周期、状态机、缓存信息（号码/运营商/信号）。
 // 与底层 AT 通讯解耦：所有 AT 调度（互斥/队列/Reader Task）由 SimDispatcher 提供，
 // 本类仅在其上构建业务方法（如 queryPhoneNumber、fetchInfo）。

@@ -93,6 +93,11 @@ static void modemPowerCycle() {
   delayWithWdt(500);
 }
 
+// 供 sim 模块调用的硬复位兜底（AT+MREBOOT 被拒绝/无响应时使用）
+void SimHardwarePowerCycle() {
+  modemPowerCycle();
+}
+
 // ---------- Arduino entry points ----------
 
 void setup() {

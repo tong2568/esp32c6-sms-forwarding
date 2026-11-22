@@ -210,14 +210,25 @@ void Sim::ensureFreshModemSession() {
   if (!needReset) return;
 
   // 软复位，每次启动最多执行一次（不循环重试，避免启动被拖死）
+  // 先关闭 1~3 号逻辑通道：eSIM 查询/切换或上一次运行残留的通道会让部分模组
+  // 拒绝 AT+MREBOOT（表现为「无法软复位」），必须先清理。
+  for (int ch = 1; ch <= 3; ch++) {
+    String cchc = String("AT+CCHC=") + ch;
+    atExchange(cchc.c_str(), 1000, nullptr);
+  }
   LOG("SIM", "模组未被真正复位，执行软复位 AT+MREBOOT");
   atExchange("AT+MREBOOT", 3000, nullptr);
   delay(500);
   taskWdtReset();
 
   if (!waitAtReady(15000)) {
-    LOG("SIM", "软复位后模组仍未就绪，继续启动（SIM 可能不可用）");
-    return;
+    // 软复位失败/模组拒绝时，用 EN 硬复位兜底（等效断电重启）
+    LOG("SIM", "软复位后模组仍未就绪，执行 EN 硬复位");
+    SimHardwarePowerCycle();
+    if (!waitAtReady(15000)) {
+      LOG("SIM", "硬复位后模组仍未就绪，继续启动（SIM 可能不可用）");
+      return;
+    }
   }
   if (probeCardSession() == 0) {
     LOG("SIM", "软复位完成，卡会话已重置");
