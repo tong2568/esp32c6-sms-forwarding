@@ -42,6 +42,16 @@
 - 工具箱支持查询实体 eSIM（eUICC）的 EID 与 Profile 列表，并可一键启用未启用的 Profile（启用成功后设备自动重启生效；失败则报错且不重启）
 - 「网络状态」显示 VoLTE/IMS 注册情况（模组固件支持 `AT+CIREG` 时）
 
+### 功能示例
+
+**eSIM 卡信息（EID、Profile 列表与一键启用）**
+
+<img src="assets/esim-info.png" width="480" />
+
+**SOC 信息查询（堆内存 / Flash / LittleFS / 芯片信息）**
+
+<img src="assets/soc-info.png" width="480" />
+
 ## 推送通道支持
 
 支持以下 12 种推送方式，最多可同时启用 10 个通道，每个通道可独立配置推送策略。
