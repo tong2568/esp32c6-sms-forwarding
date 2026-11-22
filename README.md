@@ -112,12 +112,12 @@ ESP32-C6 SuperMini 与 ML307R/C/A 通过 UART 连接：
    ESP32-C6 SuperMini
   ┌───────────────────┐      
   │                   │
-  │      GPIO14 (RX) ◄┼─┐     ML307R/C/A核心板 
+  │       GPIO14 (RX) │◄┐     ML307R/C/A核心板 
   │                   │ |   ┌─────────────────┐
   │                   │ |   │                 │
-  │  GPIO19 (MODEM_EN)│─┼──►│ EN              │
-  │        GPIO20 (TX)│─┼──►│ RX              │
-  │              3V3  │ └───│ TX              │
+  │ GPIO19 (MODEM_EN)─┼─┼──►│ EN              │
+  │       GPIO20 (TX)─┼─┼──►│ RX              │
+  │              3V3  │ └───┼─TX              │
   │              GND ─┼─────┤ GND             │
   │               5V ─┼─────┤ VCC (5V)        │
   │                   │     │                 │
@@ -135,38 +135,6 @@ ESP32-C6 SuperMini 与 ML307R/C/A 通过 UART 连接：
 | 电源 | 5V | VCC |
 
 > 如需改引脚，编辑 [`src/main.cpp`](src/main.cpp) 顶部的 `TXD/RXD/MODEM_EN_PIN` 宏即可（GPIO20/14 均为 C6 普通 GPIO，无 strapping/JTAG/Flash 复用，可直接用于 UART）。
-
-## 编译与烧录
-
-```bash
-# 编译（default_envs 已指向 C6，直接 pio run 即可）
-pio run
-# 或显式指定环境
-pio run -e esp32c6_supermini
-
-# 烧录固件 + Web UI 文件系统
-pio run -e esp32c6_supermini -t upload
-pio run -e esp32c6_supermini -t uploadfs
-```
-
-命令行全量烧录（esptool）：
-
-```bash
-pip install "esptool>=4.8"
-esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
-```
-
-## Release 与在线升级
-
-- 推送到 `master` 后，GitHub Actions 会自动构建 C6 固件并发布 Release（`full-*.bin`、`update-*.bin`、`ota-*.bin`、`littlefs-*.bin`、`firmware-*.elf`）。
-- 固件内的在线升级地址由 CI 注入为当前仓库，例如 `https://github.com/<owner>/<repo>/releases`。
-- 本地构建想指向自己的 Release，可用环境变量覆盖：
-
-  ```bash
-  OTA_GITHUB_REPO=<owner>/<repo> pio run -e esp32c6_supermini
-  ```
-
-- 也可以在工具箱里「手动上传固件（`ota-*.bin`）」完成离线升级。
 
 ## 快速开始
 
@@ -207,6 +175,38 @@ esptool --chip esp32c6 --baud 460800 write_flash 0x3B0000 littlefs.bin
 4. 设备重启后连接路由器，通过路由器分配的 IP 访问管理界面
 5. 默认 Web 界面账号/密码为 `admin / admin123`，请尽快修改
 6. 在推送通道区域添加并配置推送方式，保存配置
+
+## 编译与烧录
+
+```bash
+# 编译（default_envs 已指向 C6，直接 pio run 即可）
+pio run
+# 或显式指定环境
+pio run -e esp32c6_supermini
+
+# 烧录固件 + Web UI 文件系统
+pio run -e esp32c6_supermini -t upload
+pio run -e esp32c6_supermini -t uploadfs
+```
+
+命令行全量烧录（esptool）：
+
+```bash
+pip install "esptool>=4.8"
+esptool --chip esp32c6 --baud 460800 write_flash 0x0 full.bin
+```
+
+## Release 与在线升级
+
+- 推送到 `master` 后，GitHub Actions 会自动构建 C6 固件并发布 Release（`full-*.bin`、`update-*.bin`、`ota-*.bin`、`littlefs-*.bin`、`firmware-*.elf`）。
+- 固件内的在线升级地址由 CI 注入为当前仓库，例如 `https://github.com/<owner>/<repo>/releases`。
+- 本地构建想指向自己的 Release，可用环境变量覆盖：
+
+  ```bash
+  OTA_GITHUB_REPO=<owner>/<repo> pio run -e esp32c6_supermini
+  ```
+
+- 也可以在工具箱里「手动上传固件（`ota-*.bin`）」完成离线升级。
 
 ## 引脚定义
 
@@ -279,7 +279,7 @@ pio run -e esp32c6_supermini -t uploadfs
 ## 已知限制
 
 - 仅提供 ESP32-C6 SuperMini（4MB Flash）固件与分区表；其它 Flash 容量需自行调整 `partitions.csv`。
-- BluFi（BLE 配网）不可用，请使用 AP 热点 + 网页配网。
+- **BluFi（BLE 配网）不可用**，请使用 AP 热点 + 网页配网。
 - 为兼容 WPA2/WPA3 混合路由，固件固定使用 WPA2 连接；纯 WPA3 网络无法连接。
 - 蜂窝数据默认关闭；如需使用 Ping 等数据功能，请在网页中手动开启「数据流量」。
 - eSIM 查询/启用仅适用于**实体 eUICC 卡**；普通 SIM 或软 eSIM 会提示「未检测到 eUICC 应用」。
@@ -287,7 +287,7 @@ pio run -e esp32c6_supermini -t uploadfs
 
 ## 鸣谢
 
-感谢以下两个开源项目及其作者（本项目已独立维护，无需另行通知作者）：
+感谢以下两个开源项目及其作者：
 
 - **[chenxuuu/sms_forwarding](https://github.com/chenxuuu/sms_forwarding)** — 作者 **chenxuuu**：原始硬件短信转发器项目，提供了整体思路与基础实现。
 - **[maxming2333/esp32-sms-forwarding](https://github.com/maxming2333/esp32-sms-forwarding)** — 作者 **maxming2333**：在原始项目基础上用 C++17 + PlatformIO 重构，并扩展了多推送通道、Web 配置、OTA 等功能。
@@ -295,5 +295,3 @@ pio run -e esp32c6_supermini -t uploadfs
 ## AI 辅助说明
 
 本项目的 **ESP32-C6 移植、ESP-IDF 5.x / mbedTLS 3.x 兼容性修复、文档整理以及 CI/Release 流程** 使用了 AI 辅助（大语言模型）进行分析与修改建议；所有改动均由维护者审阅、编译并在真实硬件上验证后提交。
-
-GitHub 的服务条款并未禁止 AI 辅助开发，此处如实说明以保持透明。
