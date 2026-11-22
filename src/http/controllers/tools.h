@@ -5,6 +5,8 @@
 void sendSmsController(AsyncWebServerRequest* request);
 void pingController(AsyncWebServerRequest* request);
 void queryController(AsyncWebServerRequest* request);
+void esimInfoController(AsyncWebServerRequest* request);
+void esimEnableController(AsyncWebServerRequest* request);
 void flightModeController(AsyncWebServerRequest* request);
 void atCommandController(AsyncWebServerRequest* request);
 

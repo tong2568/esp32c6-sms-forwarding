@@ -8,6 +8,7 @@
 #include "sms/sms.h"
 #include "sim/sim_dispatcher.h"
 #include "wifi/wifi_manager.h"
+#include "esim/esim.h"
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
 #include <WiFi.h>
@@ -236,6 +237,22 @@ void queryController(AsyncWebServerRequest* request) {
       if (ci >= 0) { int s = tmp.substring(ci + 1, ci + 2).toInt(); const char* names[] = {"未注册，未搜索","已注册，本地网络","未注册，正在搜索","注册被拒绝","未知","已注册，漫游"}; regStatus = (s >= 0 && s <= 5) ? names[s] : "状态码:" + String(s); }
     }
     message += "<tr><td>网络注册</td><td>" + regStatus + "</td></tr>";
+    resp = sendATCommand("AT+CIREG?", 2000);
+    String volteStr = "无法查询（模组不支持 +CIREG）";
+    if (resp.indexOf("+CIREG:") >= 0) {
+      int idx = resp.indexOf("+CIREG:");
+      String tmp = resp.substring(idx + 7);
+      int nl = tmp.indexOf('\n'); if (nl > 0) tmp = tmp.substring(0, nl);
+      tmp.trim();
+      int comma = tmp.indexOf(',');
+      if (comma >= 0) {
+        int reg = tmp.substring(comma + 1).toInt();
+        volteStr = (reg != 0) ? ("已注册（reg_info=" + String(reg) + "）") : "未注册";
+      } else {
+        volteStr = "响应格式未知: " + tmp;
+      }
+    }
+    message += "<tr><td>VoLTE/IMS 注册</td><td>" + volteStr + "</td></tr>";
     resp = sendATCommand("AT+COPS?", 2000);
     String oper = "未知";
     if (resp.indexOf("+COPS:") >= 0) { int idx = resp.indexOf(",\""); if (idx >= 0) { int ei = resp.indexOf("\"", idx + 2); if (ei > idx) oper = resp.substring(idx + 2, ei); } }
@@ -273,6 +290,59 @@ void queryController(AsyncWebServerRequest* request) {
   else { message = "未知的查询类型"; }
 
   sendJsonResponse(request, success, message);
+}
+
+void esimInfoController(AsyncWebServerRequest* request) {
+  String eid, message;
+  std::vector<EsimProfile> profiles;
+  bool isEuicc = false;
+  bool ok = Esim::query(eid, profiles, isEuicc, message);
+
+  AsyncJsonResponse* resp = new AsyncJsonResponse();
+  JsonObject root = resp->getRoot();
+  root["ok"]       = ok;
+  root["isEuicc"]  = isEuicc;
+  root["eid"]      = eid;
+  root["message"]  = message;
+  JsonArray arr = root["profiles"].to<JsonArray>();
+  for (const EsimProfile& p : profiles) {
+    JsonObject o = arr.add<JsonObject>();
+    o["iccid"]   = p.iccid;
+    o["aid"]     = p.isdpAid;
+    o["state"]   = p.state;
+    o["nickname"] = p.nickname;
+    o["spn"]     = p.serviceProvider;
+    o["name"]    = p.profileName;
+    o["class"]   = p.profileClass;
+  }
+  resp->setLength();
+  request->send(resp);
+}
+
+void esimEnableController(AsyncWebServerRequest* request) {
+  if (!request->hasParam("id", true)) {
+    JsonResp::err(request, 400, "缺少 Profile 标识");
+    return;
+  }
+  String id = request->getParam("id", true)->value();
+  id.trim();
+  if (id.length() == 0) {
+    JsonResp::err(request, 400, "Profile 标识为空");
+    return;
+  }
+  String message;
+  bool ok = Esim::enableProfile(id, message);
+  if (ok) {
+    JsonResp::ok(request, message);
+    LOG("HTOOLS", "eSIM Profile 已启用，2 秒后自动重启");
+    // 先让 HTTP 响应发出，再重启；切换失败时不会走到这里
+    xTaskCreate([](void*) {
+      vTaskDelay(pdMS_TO_TICKS(2000));
+      ESP.restart();
+    }, "esim_rst", 3072, nullptr, 2, nullptr);
+  } else {
+    JsonResp::err(request, 200, message);
+  }
 }
 
 void flightModeController(AsyncWebServerRequest* request) {

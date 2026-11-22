@@ -59,6 +59,8 @@ void HttpServer::setup(AsyncWebServer& server) {
   server.on("/api/logs",    HTTP_GET,    logsController);
   server.on("/api/logs",    HTTP_DELETE, logsDeleteController);
   server.on("/api/soc",     HTTP_GET,  socController);
+  server.on("/api/esim/info",   HTTP_GET,  esimInfoController);
+  server.on("/api/esim/enable", HTTP_POST, esimEnableController);
 
   // WiFi configuration API
   server.on("/api/wifi", HTTP_GET, wifiGetController);

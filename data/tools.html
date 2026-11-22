@@ -354,8 +354,16 @@
           >
             📡 WiFi状态
           </button>
+          <button
+            type="button"
+            onclick="queryEsim()"
+            style="background: #673ab7"
+          >
+            📱 eSIM 卡信息
+          </button>
         </div>
         <div class="result-box" id="queryResult"></div>
+        <div class="result-box" id="esimResult"></div>
       </div>
 
       <div class="section">
@@ -1046,6 +1054,102 @@
           .catch(function (e) {
             result.className = "result-box result-error";
             result.textContent = "❌ 请求失败: " + e.message;
+          });
+      }
+
+      function escHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+
+      function queryEsim() {
+        var r = document.getElementById("esimResult");
+        r.className = "result-box result-loading";
+        r.style.display = "block";
+        r.textContent = "正在读取 eSIM 信息（可能需要几秒）...";
+        fetch("/api/esim/info")
+          .then(function (resp) {
+            return resp.json();
+          })
+          .then(function (d) {
+            if (!d.isEuicc) {
+              r.className = "result-box result-error";
+              r.innerHTML = "ℹ️ " + escHtml(d.message || "当前卡不是实体 eSIM");
+              return;
+            }
+            var html =
+              "<table class='info-table'><tr><td>EID</td><td>" +
+              escHtml(d.eid || "未知") +
+              "</td></tr></table>";
+            var ps = d.profiles || [];
+            html +=
+              "<table class='info-table' style='margin-top:10px'><tr><th>Profile</th><th>状态</th><th>操作</th></tr>";
+            if (!ps.length) {
+              html += "<tr><td colspan='3'>未读取到 Profile</td></tr>";
+            }
+            ps.forEach(function (p) {
+              var name = escHtml(p.nickname || p.name || p.spn || p.iccid || p.aid);
+              var st =
+                p.state === "enabled"
+                  ? "✅ 已启用"
+                  : p.state === "disabled"
+                  ? "⚪ 未启用"
+                  : escHtml(p.state);
+              var id = p.iccid || p.aid || "";
+              var op =
+                p.state === "enabled"
+                  ? "—"
+                  : "<button type='button' class='btn-query' data-id=\"" +
+                    escHtml(id) +
+                    "\" onclick=\"enableEsim(this.dataset.id)\">启用</button>";
+              html +=
+                "<tr><td>" +
+                name +
+                "<br><small>" +
+                escHtml(p.iccid || "") +
+                "</small></td><td>" +
+                st +
+                "</td><td>" +
+                op +
+                "</td></tr>";
+            });
+            html += "</table>";
+            if (d.message) html += "<div class='hint'>" + escHtml(d.message) + "</div>";
+            r.className = "result-box result-info";
+            r.innerHTML = html;
+          })
+          .catch(function (e) {
+            r.className = "result-box result-error";
+            r.textContent = "❌ 查询失败: " + e.message;
+          });
+      }
+
+      function enableEsim(id) {
+        if (!id) return;
+        if (!confirm("确定启用该 eSIM Profile？启用后需要重启设备。")) return;
+        var r = document.getElementById("esimResult");
+        r.className = "result-box result-loading";
+        r.textContent = "正在启用，请稍候...";
+        var form = new FormData();
+        form.append("id", id);
+        fetch("/api/esim/enable", { method: "POST", body: form })
+          .then(function (resp) {
+            return resp.json();
+          })
+          .then(function (d) {
+            if (d.ok) {
+              r.className = "result-box result-success";
+              r.innerHTML =
+                "✅ " + escHtml(d.message) + "<br>设备即将自动重启，请稍候刷新页面。";
+            } else {
+              r.className = "result-box result-error";
+              r.textContent = "❌ " + (d.error || d.message || "启用失败");
+            }
+          })
+          .catch(function (e) {
+            r.className = "result-box result-error";
+            r.textContent = "❌ 请求失败: " + e.message;
           });
       }
 
